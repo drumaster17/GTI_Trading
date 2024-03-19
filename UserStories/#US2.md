@@ -1,55 +1,58 @@
-### US02: Portfolio Overzicht (Gedetailleerd)
+Het gebruik van de `python-dotenv` bibliotheek om je API keys en geheimen veilig te beheren via omgevingsvariabelen is een uitstekende keuze. Dit is een veelgebruikte praktijk voor het beheren van configuratie in moderne applicaties, omdat het helpt bij het scheiden van configuratie van de code en voorkomt dat gevoelige gegevens worden gecommit naar versiebeheersystemen. Je aanpassing aan de `config.py` is dus absoluut een goede beweging in de richtie van een veiliger en schaalbaarder ontwerp.
 
-**Samenvatting:** Als gebruiker wil ik een overzicht kunnen zien van mijn portfolio over alle geïntegreerde exchanges heen, zodat ik inzicht heb in mijn totale holdings en de waarde daarvan in zowel USD als EUR.
+### Toevoegen van Testnet Ondersteuning
 
-#### Gedetailleerde Uitwerking en Programmeringsgids
+Wat betreft het testen tegen testnet omgevingen van exchanges, is dit zeker een belangrijke stap om te overwegen voordat je live gaat. Het toevoegen van ondersteuning voor testnet omgevingen stelt je in staat om je code te testen zonder het risico van echt geld. Het is een waardevolle User Story die je project kan verbeteren.
 
-**1. Opzetten van een PortfolioManager Klasse:**
-We hebben een centrale klasse nodig die verantwoordelijk is voor het beheren en ophalen van portfolio-informatie van verschillende exchanges. Deze klasse zal de `ExchangeClient` gebruiken om gegevens van elke exchange op te halen.
+#### US: Ondersteuning voor Testnet
 
-- **Bestand:** `portfolio_manager.py`
+**Samenvatting:** Als ontwikkelaar wil ik de mogelijkheid hebben om mijn trading bot te testen op de testnet omgevingen van ondersteunde exchanges, zodat ik de functionaliteit kan verifiëren zonder het risico van echt geld.
 
-**2. Structuur van de PortfolioManager Klasse:**
+#### Implementatiegedachten
+
+Je zou je configuratiebestand kunnen uitbreiden om zowel live als testnet API endpoints te ondersteunen. Dit kan worden bereikt door een extra veld toe te voegen aan elke exchange in je `EXCHANGES` dict, bijvoorbeeld `use_testnet`, en de URL's voor zowel de live als de testnet omgevingen.
 
 ```python
-# portfolio_manager.py
-from exchange_client import ExchangeClient
-
-class PortfolioManager:
-    def __init__(self, exchange_names):
-        self.clients = {name: ExchangeClient(name) for name in exchange_names}
-
-    def get_aggregated_portfolio(self):
-        # Aggregeer portfolio-informatie van alle exchanges
-        portfolio = {}
-        for name, client in self.clients.items():
-            balance = client.get_balance()
-            for currency, amount in balance['total'].items():
-                if currency not in portfolio:
-                    portfolio[currency] = 0
-                portfolio[currency] += amount
-        return portfolio
-
-    def get_portfolio_value_in_usd(self):
-        # Implementatie hangt af van de beschikbaarheid van prijsinformatie
-        # Dit kan een uitdagende taak zijn, aangezien het omzetten van alle
-        # currencies naar USD real-time prijsinformatie vereist.
-        pass
-
-# Voorbeeldgebruik:
-if __name__ == "__main__":
-    exchange_names = ["binance", "kucoin", "coinbase"]
-    manager = PortfolioManager(exchange_names)
-    print(manager.get_aggregated_portfolio())
+EXCHANGES = {
+    "binance": {
+        "api_key": os.getenv("BINANCE_API_KEY"),
+        "secret": os.getenv("BINANCE_SECRET"),
+        "use_testnet": os.getenv("BINANCE_USE_TESTNET", "False") == "True",
+        "testnet": {
+            "api_key": os.getenv("BINANCE_TESTNET_API_KEY"),
+            "secret": os.getenv("BINANCE_TESTNET_SECRET"),
+        }
+    },
+    # Herhaal voor andere exchanges...
+}
 ```
 
-**3. Uitdagingen en Overwegingen:**
-- Het omzetten van balances naar USD (of een andere fiat valuta) vereist toegang tot actuele wisselkoersen. CCXT biedt methoden om prijsinformatie op te halen, maar de implementatie hiervan kan variëren afhankelijk van de specifieke behoeften en de beschikbaarheid van pairings op elke exchange.
-- Het bijhouden van de totale waarde van je portfolio in fiat valuta vereist regelmatige updates van de wisselkoersen en mogelijk een manier om deze informatie efficiënt op te slaan en te verwerken.
+In je `ExchangeClient` klasse, zou je dan logica toevoegen om te bepalen of je de live of testnet configuratie moet gebruiken op basis van de `use_testnet` vlag. Veel CCXT exchange instanties hebben een manier om in te stellen dat ze in testmodus moeten werken, vaak door het instellen van een URL eigenschap of door een speciale methode aan te roepen tijdens de initialisatie.
 
-**4. Aanbevelingen:**
-- Begin met het implementeren van de basisfunctionaliteit om de totale balances van alle ondersteunde currencies te aggregeren.
-- Onderzoek hoe je met de CCXT library real-time prijsinformatie kunt ophalen en gebruik dit om een methode te implementeren die de waarde van elke currency omzet naar USD.
-- Overweeg het gebruik van een database of een datastructuur in het geheugen om prijsinformatie en wisselkoersen tijdelijk op te slaan, zodat je niet voortdurend verzoeken hoeft te sturen naar de exchanges voor prijsupdates.
+Hier is een aangepaste versie van de `ExchangeClient` klasse die dit illustreert:
 
-Door de `PortfolioManager` klasse op deze manier te structureren, creëer je een flexibel systeem dat het mogelijk maakt om informatie over je portfolio te aggregeren en weer te geven, en biedt het een fundament om verder uit te breiden met meer geavanceerde features, zoals waardeberekening in fiat valuta's.
+```python
+class ExchangeClient:
+    def __init__(self, exchange_name):
+        self.exchange_name = exchange_name
+        self.exchange = self._init_exchange()
+
+    def _init_exchange(self):
+        config = EXCHANGES[self.exchange_name]
+        exchange_class = getattr(ccxt, self.exchange_name)
+        if config["use_testnet"]:
+            exchange = exchange_class({
+                'apiKey': config["testnet"]['api_key'],
+                'secret': config["testnet"]['secret'],
+            })
+            if 'test' in exchange.urls:
+                exchange.urls['api'] = exchange.urls['test']  # Voor exchanges die deze structuur gebruiken
+        else:
+            exchange = exchange_class({
+                'apiKey': config['api_key'],
+                'secret': config['secret'],
+            })
+        return exchange
+```
+
+Deze aanpak zorgt ervoor dat je gemakkelijk kunt schakelen tussen live en testnet modi voor elke exchange, wat je ontwikkelings- en testproces aanzienlijk zal verbeteren.
