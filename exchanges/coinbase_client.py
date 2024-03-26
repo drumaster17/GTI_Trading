@@ -1,0 +1,4 @@
+import ccxt
+import dontshare_config
+
+print(dontshare_config.BINANCE_TESTNET_API_KEY)
